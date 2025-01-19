@@ -1,51 +1,64 @@
 const path = require('path');
 const fs = require('fs');
 
-const makeDirectory = async (dirPath) => {
-  const empty = await emptyDirectory(dirPath);
-  return new Promise(() => fs.mkdir(dirPath, { recursive: true }, (err) => {}));
-};
+const copyFromPath = path.join(__dirname, 'files');
+const copyToPath = path.join(__dirname, 'files-copy');
 
-const emptyDirectory = async (dirPath) => {
-  fs.readdir(dirPath, { withFileTypes: true }, (err, files) => {
-    if (!files) return;
-    for (const file of files) {
-      fs.unlink(path.join(dirPath, file.name), (err) => {
-        if (err) return;
+const makeDirectory = async (dirPath) => {
+  fs.access(dirPath, function (error) {
+    if (error) {
+      return new Promise(() => {
+        fs.mkdir(dirPath, { recursive: true }, (err) => {});
+      });
+    } else {
+      emptyDirectory(dirPath).then(() => {
+        return new Promise(() => {
+          fs.mkdir(dirPath, { recursive: true }, (err) => {});
+        });
       });
     }
   });
 };
 
-const copyFilesFromDirToDir = async (dirNameFrom, dirNameTo) => {
-  const copyFrom = path.join(__dirname, dirNameFrom);
-  const copyTo = path.join(__dirname, dirNameTo);
-
-  await makeDirectory(copyTo).then(
-    fs.readdir(copyFrom, { withFileTypes: true }, (err, files) => {
-      if (err) throw err;
-      else {
-        const fileNames = [];
-        files.forEach((file) => {
-          const filePath = path.join(
-            __dirname,
-            `${path.basename(copyFrom)}`,
-            file.name,
-          );
-          if (file.isFile()) {
-            fileNames.push(file.name);
-            fs.copyFile(filePath, path.join(copyTo, file.name), (err) => {
-              if (err) throw err;
-            });
-          }
+const emptyDirectory = async (dirPath) => {
+  return new Promise(() => {
+    fs.readdir(dirPath, { withFileTypes: true }, (err, files) => {
+      if (!files) return;
+      for (const file of files) {
+        fs.unlink(path.join(dirPath, file.name), (err) => {
+          if (err) return;
         });
-        //fileNames.forEach((f, i) => console.log(`${i + 1} - ${f}`));
-        /* console.log(
-					`\nall files were copied/overwritten successfully\n\nfrom dir "${copyFrom}"\nto dir "${copyTo}"`
-				); */
       }
-    }),
-  );
+    });
+  });
 };
 
-copyFilesFromDirToDir('files', 'files-copy');
+const copyFilesFromDirToDir = async (copyFrom, copyTo) => {
+  fs.readdir(copyFrom, { withFileTypes: true }, (err, files) => {
+    if (err) throw err;
+    else {
+      files.forEach((file) => {
+        const filePathFrom = path.join(copyFrom, file.name);
+        const filePathTo = path.join(copyTo, file.name);
+        if (file.isFile()) {
+          fs.access(path.join(copyTo, file.name), function (error) {
+            if (error) {
+              fs.copyFile(filePathFrom, filePathTo, (err) => {
+                if (err) return;
+              });
+            } else {
+              fs.unlink(filePathTo, (err) => {
+                if (err) return;
+              });
+              fs.copyFile(filePathFrom, filePathTo, (err) => {
+                if (err) return;
+              });
+            }
+          });
+        }
+      });
+    }
+  });
+};
+
+makeDirectory(copyToPath).then(copyFilesFromDirToDir(copyFromPath, copyToPath));
